@@ -1,5 +1,11 @@
 # Clipper
 
+## 실제 GPU에서 설정 변경 및 실행
+
+`docker/v2`의 **[setting_readme.md](setting_readme.md)**에서 GPU·모델·SLO·배치 설정과
+단계별 Docker 명령을 확인하세요. 상세 구현과 오류 해결은 [docker.md](docker.md)를 참고하세요.
+원본 프런트엔드는 유지하고 독립 HF/PyTorch GPU 워커를 연결합니다.
+
 [![Build Status](https://amplab.cs.berkeley.edu/jenkins/buildStatus/icon?job=Clipper)](https://amplab.cs.berkeley.edu/jenkins/job/Clipper/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 

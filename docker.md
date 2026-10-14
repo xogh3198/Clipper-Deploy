@@ -1,5 +1,7 @@
 # Clipper 단일 GPU 실행 가이드
 
+모델·GPU·배치 설정과 단계별 명령은 **[setting_readme.md](setting_readme.md)**를 먼저 참고하세요.
+
 Clipper 원본 프런트엔드와 배치·RPC 경로에 독립 GPU 워커를 연결하는 추가 구성입니다.
 INFaaS/Proteus 코드·이미지·컨테이너를 실행 백엔드로 사용하지 않습니다. 기존 Clipper 핵심 코드는 수정하지 않습니다.
 

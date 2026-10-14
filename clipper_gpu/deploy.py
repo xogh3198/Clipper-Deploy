@@ -281,19 +281,21 @@ def sample(c, source=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Original Clipper + independent GPU worker")
-    parser.add_argument("command", choices=["config", "build", "download", "sample", "doctor", "up", "register",
+    parser.add_argument("command", choices=["config", "settings", "build", "download", "sample", "doctor", "up", "register",
                          "query", "test", "cold-test", "batching-test", "state", "logs", "down"])
     parser.add_argument("service", nargs="?", choices=["redis", "management", "query", "worker"])
-    parser.add_argument("--models", choices=["resnet-50"], default="resnet-50")
+    parser.add_argument("--models", help="Optional name; must match MODEL_NAME in settings")
     parser.add_argument("--from", dest="source")
     parser.add_argument("-n", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--watch", type=float, default=0)
     args = parser.parse_args()
     c = load()
+    if args.models and args.models != c["MODEL_NAME"]:
+        parser.error("--models must match MODEL_NAME; change the model in clipper-docker.local.env")
     if args.n is not None and args.n < 1 or args.concurrency < 1 or args.watch < 0:
         parser.error("Counts and concurrency must be positive; watch must be nonnegative")
-    if args.command == "config":
+    if args.command in ("config", "settings"):
         docker_info()
         print(json.dumps(c, indent=2))
     elif args.command == "build":

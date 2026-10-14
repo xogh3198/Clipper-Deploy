@@ -25,7 +25,10 @@ def read_env(path):
 def load(root=ROOT):
     root = Path(root).resolve()
     values = read_env(root / "deploy/docker/clipper-docker.env")
-    values.update(read_env(root / "deploy/docker/clipper-docker.local.env"))
+    local = read_env(root / "deploy/docker/clipper-docker.local.env")
+    if set(local) - set(values):
+        raise ValueError("Unknown local settings: " + ", ".join(sorted(set(local) - set(values))))
+    values.update(local)
     for key in list(values):
         if key in os.environ:
             values[key] = os.environ[key]
@@ -49,6 +52,8 @@ def load(root=ROOT):
         raise ValueError("SLO must be positive; BATCH_SIZE must be -1 or positive")
     if not re.fullmatch(r"[0-9a-f]{40}", values["MODEL_REVISION"]):
         raise ValueError("Use a pinned model revision, not a mutable branch")
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*/[a-zA-Z0-9][a-zA-Z0-9_.-]*", values["MODEL_ID"]):
+        raise ValueError("MODEL_ID must be a Hugging Face owner/model ID")
     values["ROOT"] = str(root)
     for key in ("MODEL_DIR", "RESULT_DIR", "INPUT_IMAGE"):
         path = Path(values[key]).expanduser()

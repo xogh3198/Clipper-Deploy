@@ -24,3 +24,9 @@ docker-compose.yml
 
 # model for testing
 model.h5
+# Local GPU experiment files (never commit weights, settings or measurements).
+/data/
+/inputs/
+/deploy/docker/clipper-docker.local.env
+/clipper_gpu/__pycache__/
+/tests_clipper_gpu/__pycache__/
