@@ -1,0 +1,8 @@
+.git
+**/.git
+data
+inputs
+**/__pycache__
+**/.pytest_cache
+clipper_gpu
+tests_clipper_gpu

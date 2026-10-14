@@ -1,0 +1,5 @@
+*
+!deploy/
+!deploy/docker/
+!deploy/docker/fix-event-headers.py
+!deploy/docker/event-header-probe.cpp

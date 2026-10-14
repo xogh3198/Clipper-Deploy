@@ -1,0 +1,9 @@
+*
+!clipper_gpu/
+!clipper_gpu/**
+!containers/
+!containers/python/
+!containers/python/rpc.py
+!deploy/
+!deploy/docker/
+!deploy/docker/requirements-gpu.txt
