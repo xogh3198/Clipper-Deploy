@@ -9,6 +9,10 @@ INFaaS/Proteus 코드·이미지·컨테이너를 실행 백엔드로 사용하�
 원본에는 논문 초기 AIMD 이후의 **Adaptive Batching v2**가 들어 있습니다.
 따라서 이 브랜치를 그대로 실행했다고 해서 2017년 논문의 AIMD 재현이라고 부르면 안 됩니다.
 
+`docker/v3`에서는 추가 GPU 워커의 공통 라이브러리·CUDA 초기화를 요청 전에 수행합니다.
+첫 요청의 모델 읽기·GPU 이동·예열과 `startup_ms`를 구분하며, 원본 프런트엔드·배치·RPC 코드는 유지합니다.
+이전 `docker/v2`는 일부 초기화 비용을 첫 요청에 포함하므로 cold 수치를 그대로 비교하지 마세요.
+
 ## 1. 기본 설정
 
 | 항목 | 기본값 |
@@ -22,12 +26,14 @@ INFaaS/Proteus 코드·이미지·컨테이너를 실행 백엔드로 사용하�
 | 응답 캐시 | `--prediction_cache_size=0` |
 | 전처리 | PIL 디코딩 + Hugging Face CPU image processor |
 | CPU 스레드 | 워커 2, 쿼리 프런트엔드 16 |
+| 모델 예열 | `WARMUP_QUERIES=10`, 첫 요청의 `load_ms`에 포함 |
 | 포트 | 호스트 `127.0.0.1:21337/21338/21339` |
 | Docker 프로젝트 | `taeho-clipper` |
 
 워커의 CUDA 장치 `cuda:0`은 컨테이너 안에서 보이는 첫 장치이며, 실제 호스트 GPU는 설정한 `GPU=2`입니다.
 학습은 하지 않습니다. `download`는 사전 학습된 모델 가중치와 설정 파일을 다운로드하고,
 워커는 첫 요청에서 이를 GPU에 올려 추론합니다. 등록/상태 조회는 추론을 수행하지 않습니다.
+단, 모델 준비 과정에서 합성 이미지로 설정된 횟수만큼 예열합니다. 실제 요청 배치 횟수와 별도로 집계합니다.
 
 환경은 `deploy/docker/clipper-docker.env`에 있습니다.
 개인 설정은 아래 파일로 덮어씁니다. 이 파일은 Git에서 제외됩니다.
@@ -42,7 +48,7 @@ vim deploy/docker/clipper-docker.local.env
 
 ```dotenv
 MODEL_DIR=/data4tb/taeho-proteus/clipper/models
-RESULT_DIR=/data4tb/taeho-proteus/clipper/results
+RESULT_DIR=/data4tb/taeho-proteus/clipper/v3/results
 ```
 
 Docker 이미지/빌드 캐시 위치는 **현재 선택한 Docker 데몬의 data-root**로 결정됩니다.
@@ -88,6 +94,7 @@ bash deploy/docker/clipper-docker.sh sample --from /home/xsailor4/taeho/infaas_d
 
 `doctor`는 V100/CUDA 연산, 고정 리비전 가중치 파일, 원본 Python RPC import를 확인합니다.
 **프런트엔드 추론·SLO·배치 검증 완료를 의미하지 않습니다.**
+다운로드와 오프라인 검사는 동일한 추론 파일 필터를 사용합니다. README·Flax·TensorFlow 파일을 요구하지 않습니다.
 
 ### 원본 의존성 이미지와 로컬 빌드
 
@@ -182,11 +189,14 @@ bash deploy/docker/clipper-docker.sh cold-test -n 11
 INFaaS/Proteus나 다른 프로젝트의 컨테이너는 건드리지 않습니다.
 모델 다운로드 캐시, 이미지, 기존 결과는 유지합니다.
 
-1. 첫 요청: 새 워커에서 비상주 모델 로딩을 포함한 실제 GPU 실행.
-2. 첫 요청이 SLO 때문에 `DEFAULT`여도 해당 요청의 GPU 완료를 기다림.
-3. 동일 JPEG로 후속 요청 10회: 실제 모델 응답, 추가 로딩 0ms, warm 평균/최소/최대 확인.
+1. 요청 전: 새 워커의 공통 프레임워크·CUDA 초기화. `startup_ms`로 별도 기록하며 모델은 아직 비상주.
+2. 첫 요청: 비상주 모델 읽기·GPU 이동·예열을 포함한 실제 GPU 실행.
+3. 첫 요청이 SLO 때문에 `DEFAULT`여도 해당 요청의 GPU 완료를 기다림.
+4. 동일 JPEG로 후속 요청 10회: 실제 모델 응답, 추가 로딩 0ms, warm 평균/최소/최대 확인.
 
-여기서 cold는 **워커 프로세스/GPU 비상주 기준**입니다.
+여기서 cold는 **공통 프레임워크·CUDA 초기화 후 GPU 모델 비상주 기준**입니다.
+원본 Clipper 컨테이너의 모델 선로딩 후 요청 처리와 달리, 이 추가 워커는 모델 로딩 진단을 위해 요청 시 로딩합니다.
+`cold-test` 최초 실행 시에도 기존 compose 파일을 요구하지 않습니다.
 디스크 다운로드 캐시와 OS page cache를 제거한 실험은 아닙니다.
 학습, 모델 교체, 모델 선택/accuracy scaling 실험도 아닙니다.
 
@@ -194,7 +204,10 @@ INFaaS/Proteus나 다른 프로젝트의 컨테이너는 건드리지 않습니�
 `worker-*.jsonl`에는 batch size, 처리한 요청 ID, 입력 해시, 모델 준비·전처리·H2D·forward 시간이 저장됩니다.
 첫 요청의 HTTP 응답 시간과 실제 GPU 완료 시간은 **서로 다른 수치**입니다.
 
-워커 `load_ms`는 프로세서/모델 라이브러리 준비, 설정/가중치 읽기, GPU 이동을 포함합니다.
+워커 `load_ms`는 프로세서·CPU 모델 생성/설정·가중치 읽기, GPU 이동, 모델 예열을 포함합니다.
+공통 라이브러리·CUDA 초기화는 `startup_ms`로 따로 기록하고, 첫 요청의 `load_stages`는
+`checkpoint_read_ms`, `model_h2d_ms`, `warmup_ms`로 나눕니다. 모델별 지연 import 등은 CPU 모델 준비에 남을 수 있습니다.
+`startup_ms`는 GPU 런타임 생성 구간이며 Docker 컨테이너 생성/프로세스 시작의 모든 비용을 포함하지 않습니다.
 `worker_total_ms`는 워커의 해당 batch 호출 처리 시간이고 HTTP/프런트엔드 대기 시간은 제외합니다.
 한 배치의 처리 시간은 요청마다 나눠 계산한 시간이 아닙니다.
 GPU 단계별 측정에 동기화와 로깅 비용이 있으므로 기존 다른 시스템의 계측 없는 실행과 완전히 동일하지 않습니다.

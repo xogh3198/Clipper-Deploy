@@ -2,9 +2,11 @@
 
 ## 실제 GPU에서 설정 변경 및 실행
 
-`docker/v2`의 **[setting_readme.md](setting_readme.md)**에서 GPU·모델·SLO·배치 설정과
+`docker/v3`의 **[setting_readme.md](setting_readme.md)**에서 GPU·모델·SLO·배치 설정과
 단계별 Docker 명령을 확인하세요. 상세 구현과 오류 해결은 [docker.md](docker.md)를 참고하세요.
 원본 프런트엔드는 유지하고 독립 HF/PyTorch GPU 워커를 연결합니다.
+`docker/v3`는 공통 라이브러리·CUDA 초기화를 요청 전에 수행하고, 첫 요청의 모델 읽기·GPU 이동·예열을 따로 기록합니다.
+`docker/v2`의 cold 시간과 측정 범위가 다릅니다. 원본 Clipper 서빙 정책 변경이 아닌 GPU 실험 워커의 수정입니다.
 
 [![Build Status](https://amplab.cs.berkeley.edu/jenkins/buildStatus/icon?job=Clipper)](https://amplab.cs.berkeley.edu/jenkins/job/Clipper/) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 

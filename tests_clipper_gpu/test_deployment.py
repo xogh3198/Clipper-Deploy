@@ -421,12 +421,17 @@ class ClientTests(unittest.TestCase):
 
             def fake_state(_):
                 return {"run_id": "run", "model_loaded": bool(events), "forward_calls": len(events),
+                        "startup_ms": 5000, "startup_stages": {"framework_import_ms": 4900, "cuda_setup_ms": 100},
+                        "cold_definition": "model non-resident; framework/CUDA initialized; caches retained",
+                        "warmup_queries": 10, "warmup_forward_calls": 10 if events else 0,
                         "errors": 0, "recent_batches": list(events)}
 
             def fake_query(_, raw, phase):
                 i = str(len(events))
                 event = {"request_ids": [i], "batch_size": 1, "load_ms": 700 if not events else 0,
-                         "worker_total_ms": 780 if not events else 70}
+                         "worker_total_ms": 780 if not events else 70,
+                         "load_stages": {"checkpoint_read_ms": 500, "model_h2d_ms": 50, "warmup_ms": 150}
+                         if not events else {}}
                 default = not events
                 events.append(event)
                 return {"request_id": i, "phase": phase, "default": default,
@@ -441,6 +446,13 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(summary["warm_mean_ms"], 70)
             self.assertEqual(summary["warm_load_ms"], [0] * 10)
             self.assertTrue(summary["all_request_ids_executed"])
+            self.assertEqual(summary["runtime_startup_ms"], 5000)
+            self.assertEqual(summary["cold_client_e2e_ms"], 200)
+            self.assertTrue(summary["cold_default_response"])
+            self.assertEqual(summary["cold_worker_total_ms"], 780)
+            self.assertEqual(summary["cold_load_ms"], 700)
+            self.assertEqual(summary["cold_load_stages"]["warmup_ms"], 150)
+            self.assertEqual(summary["warmup_forward_delta"], 10)
             self.assertEqual(len(list(Path(directory).glob("client-*.json"))), 1)
 
     def test_reject_warm_as_cold(self):

@@ -248,7 +248,10 @@ def up(c):
     register(c)
     compose(c, "up", "-d", "worker")
     wait_for(lambda: client.state(c)["rpc_started"] and worker_registered(c))
-    print("READY: original frontend has registered the GPU RPC worker. Model resident:", client.state(c)["model_loaded"])
+    snapshot = client.state(c)
+    print("READY: original frontend has registered the GPU RPC worker. Model resident:", snapshot["model_loaded"])
+    print("Runtime initialization (before requests): %.2fms; model warmups per load: %s" %
+          (snapshot["startup_ms"], snapshot["warmup_queries"]))
 
 
 def state(c):
@@ -331,7 +334,9 @@ def main():
         return 2 if failed else 0
     else:
         if args.command == "cold-test":
-            compose(c, "down")
+            compose_path, _, _ = paths(c)
+            if compose_path.exists():
+                compose(c, "down")
             up(c)
         concurrency = args.concurrency if args.command == "batching-test" else 1
         count = args.n or (128 if concurrency > 1 else 11)

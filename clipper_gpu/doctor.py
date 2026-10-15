@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 
+from .cache import MODEL_FILES
+
 
 def main():
     import torch
@@ -14,7 +16,7 @@ def main():
               "versions": {name: importlib.metadata.version(name) for name in
                            ("torch", "torchvision", "transformers", "pillow", "numpy", "pyzmq")}}
     path = snapshot_download(repo_id=os.environ["MODEL_ID"], revision=os.environ["MODEL_REVISION"],
-                             local_files_only=True)
+                             allow_patterns=MODEL_FILES, local_files_only=True)
     if not (Path(path) / "config.json").is_file() or not list(Path(path).glob("*.safetensors")):
         raise RuntimeError("Pinned model config/weights missing; run download")
     rpc = load_rpc()

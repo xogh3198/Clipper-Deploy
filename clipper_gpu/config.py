@@ -43,6 +43,8 @@ def load(root=ROOT):
     for key in ("CPU_THREADS", "QUERY_THREADS", "QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT", "BASE_BUILD_JOBS"):
         if int(values[key]) <= 0:
             raise ValueError(key + " must be positive")
+    if int(values["WARMUP_QUERIES"]) < 0:
+        raise ValueError("WARMUP_QUERIES must be nonnegative")
     if len({values[k] for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")}) != 3:
         raise ValueError("Host ports must be distinct")
     if any(int(values[k]) > 65535 for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")):
@@ -87,6 +89,7 @@ def compose_spec(c, worker_user="0:0", run_id="pending"):
                      "CLIPPER_MODEL_PATH": "/models", "CLIPPER_INPUT_TYPE": "strings", "CLIPPER_IP": "query",
                      "CLIPPER_PORT": "7000", "MODEL_ID": c["MODEL_ID"], "MODEL_REVISION": c["MODEL_REVISION"],
                      "CPU_THREADS": c["CPU_THREADS"], "RUN_ID": run_id,
+                     "WARMUP_QUERIES": c["WARMUP_QUERIES"],
                      "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
         deploy={"resources": {"reservations": {"devices": [
             {"driver": "nvidia", "device_ids": [c["GPU"]], "capabilities": ["gpu"]}]}}})
