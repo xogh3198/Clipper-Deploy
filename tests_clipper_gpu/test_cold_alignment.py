@@ -1,5 +1,6 @@
 """No GPU required: verify timing boundaries and keep original routing untouched."""
 import contextlib
+import fnmatch
 import io
 import json
 import os
@@ -112,8 +113,21 @@ class OfflineCacheTests(unittest.TestCase):
             root = Path(directory)
             (root / "config.json").write_text("{}")
             (root / "model.safetensors").write_bytes(b"fixture")
-            # README/Flax/TensorFlow files deliberately do not exist.
-            snapshots = Mock(return_value=directory)
+            # Match the Hub's completeness check against known repository files.
+            # The unused alternative .bin checkpoint must not become mandatory.
+            (root / "preprocessor_config.json").write_text("{}")
+            repo_files = ["config.json", "preprocessor_config.json", "model.safetensors",
+                          "pytorch_model.bin", "README.md", "flax_model.msgpack", "tf_model.h5"]
+
+            def filtered_snapshot(**kwargs):
+                required = [name for name in repo_files if any(
+                    fnmatch.fnmatch(name, pattern) for pattern in kwargs["allow_patterns"])]
+                missing = [name for name in required if not (root / name).is_file()]
+                if missing:
+                    raise RuntimeError("Incomplete snapshot: " + ", ".join(missing))
+                return directory
+
+            snapshots = Mock(side_effect=filtered_snapshot)
             tensor = MagicMock()
             tensor.__mul__.return_value.item.return_value = 2
             torch = types.SimpleNamespace(set_num_threads=Mock(), ones=Mock(return_value=tensor),
@@ -132,6 +146,7 @@ class OfflineCacheTests(unittest.TestCase):
             self.assertEqual(online["allow_patterns"], MODEL_FILES)
             self.assertEqual(offline["allow_patterns"], MODEL_FILES)
             self.assertTrue(offline["local_files_only"])
+            self.assertEqual(MODEL_FILES, ["*.json", "*.safetensors"])
 
 
 class FirstColdRunTests(unittest.TestCase):

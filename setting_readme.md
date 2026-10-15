@@ -97,6 +97,7 @@ bash deploy/docker/clipper-docker.sh logs worker
 ```
 
 `up`이 애플리케이션과 모델을 등록합니다. 별도 `register`는 필수가 아닙니다.
+`doctor`는 워커가 실제 사용하는 JSON 설정과 safetensors 가중치만 검사합니다. `pytorch_model.bin`은 필요하지 않습니다.
 `sample`은 기존 INFaaS/Proteus JPEG를 복사하거나 현재 입력 파일을 확인합니다.
 다른 JPEG를 쓰려면 `INPUT_IMAGE`를 기존 파일의 경로로 지정하세요.
 

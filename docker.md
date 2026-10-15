@@ -95,6 +95,8 @@ bash deploy/docker/clipper-docker.sh sample --from /home/xsailor4/taeho/infaas_d
 `doctor`는 V100/CUDA 연산, 고정 리비전 가중치 파일, 원본 Python RPC import를 확인합니다.
 **프런트엔드 추론·SLO·배치 검증 완료를 의미하지 않습니다.**
 다운로드와 오프라인 검사는 동일한 추론 파일 필터를 사용합니다. README·Flax·TensorFlow 파일을 요구하지 않습니다.
+워커는 `use_safetensors=True`로 실행하므로 대체 가중치인 `pytorch_model.bin`도 요구하지 않습니다.
+기존 safetensors 캐시가 있으면 재다운로드하지 않아도 됩니다.
 
 ### 원본 의존성 이미지와 로컬 빌드
 
