@@ -1,6 +1,8 @@
 # CPU 전처리 → 원본 Clipper 배치 큐 → GPU 실행
 
-배포 브랜치: `docker/cpu-ready-v1` (`docker/v2`에서 분기, main 변경 없음).
+배포 브랜치: `docker/v4` (`docker/v2`에서 분기, main 변경 없음).
+세 저장소의 전처리 분리 버전은 `docker/v4`로 통일했습니다. 이전 `docker/cpu-ready-v1`과 실행 코드는 같습니다.
+기존 Clipper `docker/v3`의 별도 cold 초기화 수정은 이 브랜치에 자동 병합하지 않았습니다.
 
 ## GPU 서버에서 코드 받기
 
@@ -10,12 +12,12 @@
 ```bash
 cd /home/xsailor4/taeho/serving-repos/clipper
 git status --short
-git fetch origin refs/heads/docker/cpu-ready-v1
-git checkout -b docker/cpu-ready-v1 FETCH_HEAD
+git fetch origin refs/heads/docker/v4
+git checkout -b docker/v4 FETCH_HEAD
 ```
 
-이미 브랜치를 만들었다면 `git checkout docker/cpu-ready-v1` 후
-`git pull --ff-only origin docker/cpu-ready-v1`로 갱신합니다.
+이미 브랜치를 만들었다면 `git checkout docker/v4` 후
+`git pull --ff-only origin docker/v4`로 갱신합니다.
 
 ```text
 JPEG HTTP 요청 → CPU gateway(PIL RGB + HF slow processor)

@@ -8,7 +8,7 @@ CPU 전처리를 C++ 배치 큐 앞에 배치한 버전입니다. 기존 설치�
 ## 1. 코드와 Docker 확인
 
 ```bash
-git clone --branch docker/v2 --single-branch https://github.com/xogh3198/Clipper-Deploy.git clipper
+git clone --branch docker/v4 --single-branch https://github.com/xogh3198/Clipper-Deploy.git clipper
 cd clipper
 docker info --format '{{.DockerRootDir}}'
 nvidia-smi
