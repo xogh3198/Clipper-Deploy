@@ -80,6 +80,34 @@ TEST(TaskExecutorTests, TestDeadlineComparisonsWorkCorrectly) {
   ASSERT_TRUE(later_greater_than_earlier);
 }
 
+TEST(ModelQueueTests, ExpiredAbsoluteDeadlineNeverEntersReadyQueue) {
+  ModelQueue queue;
+  auto task = create_predict_task(1, 10000000);
+  task.deadline_unix_us_ = 1;
+  queue.add_task(task);
+  EXPECT_EQ(queue.get_size(), 0);
+}
+
+TEST(ModelQueueTests, AbsoluteDeadlineReachesBatchSelectorUnchanged) {
+  ModelQueue queue;
+  auto task = create_predict_task(1, 10000000);
+  const auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
+  task.deadline_unix_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
+      deadline.time_since_epoch()).count();
+  const int64_t expected = task.deadline_unix_us_;
+  queue.add_task(task);
+  auto containers = std::make_shared<ActiveContainers>();
+  VersionedModelId model("test", "1");
+  containers->add_container(model, 0, 0, InputType::Doubles);
+  auto container = containers->get_model_replica(model, 0);
+  auto batch = queue.get_batch(container, [expected](Deadline actual) {
+    EXPECT_EQ(std::chrono::duration_cast<std::chrono::microseconds>(
+        actual.time_since_epoch()).count(), expected);
+    return std::make_pair(1, BatchSizeDeterminationMethod::Default);
+  });
+  ASSERT_EQ(batch.size(), 1);
+}
+
 TEST(ModelQueueTests, TestGetBatchQueueNotEmpty) {
   PredictTask task_a = create_predict_task(1, 10000);
   PredictTask task_b = create_predict_task(2, 10000);

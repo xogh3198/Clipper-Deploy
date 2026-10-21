@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -628,8 +629,19 @@ class RequestHandler {
         clipper::json::parse_inputs(input_type, d);
     std::vector<folly::Future<Response>> predictions;
     for (auto input : input_batch) {
-      auto prediction = query_processor_.predict(Query{
-          name, uid, input, latency_slo_micros, policy, versioned_models});
+      Query query{name, uid, input, latency_slo_micros, policy, versioned_models};
+      if (d.HasMember("deadline_unix_us")) {
+        if (!d["deadline_unix_us"].IsInt64()) {
+          throw clipper::PredictError("deadline_unix_us must be an int64");
+        }
+        const int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        query.deadline_unix_us_ = std::min<int64_t>(d["deadline_unix_us"].GetInt64(),
+                                                   now_us + latency_slo_micros);
+        query.latency_budget_micros_ = static_cast<long>(
+            std::max<int64_t>(0, query.deadline_unix_us_ - now_us));
+      }
+      auto prediction = query_processor_.predict(std::move(query));
       predictions.push_back(std::move(prediction));
     }
     return folly::collectAll(predictions);

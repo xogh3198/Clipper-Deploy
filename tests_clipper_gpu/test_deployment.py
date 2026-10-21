@@ -55,7 +55,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_isolated_compose(self):
         spec = compose_spec(load(), "0:0", "test-run")
-        self.assertEqual(set(spec["services"]), {"redis", "management", "query", "worker"})
+        self.assertEqual(set(spec["services"]), {"redis", "management", "query", "worker", "gateway"})
         query = spec["services"]["query"]
         self.assertIn("--prediction_cache_size=0", query["command"])
         self.assertTrue(all(port.startswith("127.0.0.1:") for s in spec["services"].values()
@@ -465,16 +465,20 @@ class RecorderTests(unittest.TestCase):
             model.recorder = rec
             model.ensure_loaded = Mock(return_value=0.0)
             model.torch = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
-                                               inference_mode=contextlib.nullcontext)
+                                               inference_mode=contextlib.nullcontext, cat=Mock())
             tensor = Mock()
+            model.torch.cat.return_value = tensor
             model.processor = Mock(return_value={"pixel_values": tensor})
             logits = Mock()
             logits.argmax.return_value.cpu.return_value.tolist.return_value = [0, 0, 0]
             model.model = Mock(return_value=types.SimpleNamespace(logits=logits))
             model.model.config = types.SimpleNamespace(id2label={0: "dog"})
-            inputs = [json.dumps({"request_id": str(i), "image_b64": base64.b64encode(b"jpeg").decode()}).encode()
+            inputs = [json.dumps({"request_id": str(i), "image_sha256": "unit-hash", "preprocess_ms": 2,
+                "decode_ms": 1, "cpu_queue_ms": 0, "received_unix_us": 1}).encode()
                       for i in range(3)]
             with patch.dict(sys.modules, {"PIL": fake_pil}), \
+                 patch("clipper_gpu.prepared.processor_contract", return_value="unit-contract"), \
+                 patch("clipper_gpu.prepared.decode_tensor", return_value=tensor), \
                  patch.dict(os.environ, {"CLIPPER_MODEL_NAME": "resnet-50"}):
                 outputs = [json.loads(output) for output in model.predict_strings(inputs)]
             self.assertEqual([output["request_id"] for output in outputs], ["0", "1", "2"])

@@ -96,6 +96,9 @@ def measure(c, count=11, concurrency=1, cold=False):
     if cold:
         result = query_one(c, raw, "cold")
         print_query(result)
+        if result.get("response", {}).get("native_submitted") is False:
+            raise RuntimeError("Cold request expired/rejected before the native queue; no GPU cold sample. "
+                               "Check CPU preparation latency or explicitly choose a larger SLO for diagnosis.")
         result["worker_completion"] = wait_completed(c, result["request_id"])
         records.append(result)
         print("cold actual worker completion: %.2fms; load: %.2fms" % (

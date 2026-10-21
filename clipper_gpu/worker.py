@@ -1,9 +1,6 @@
 """A lazy-loading FP32 GPU model attached to Clipper's unchanged Python RPC."""
-import base64
 from collections import deque
-import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import io
 import json
 import os
 from pathlib import Path
@@ -57,10 +54,14 @@ class GPUModel:
         self.model = None
         self.processor = None
         torch.set_num_threads(int(os.environ.get("CPU_THREADS", "2")))
-        torch.set_num_interop_threads(1)
+        interop = int(os.environ.get("CPU_INTEROP_THREADS", "1"))
+        if torch.get_num_interop_threads() != interop:
+            torch.set_num_interop_threads(interop)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
-        recorder.update(precision="fp32", preprocessing="PIL + Hugging Face CPU processor",
+        torch.backends.cudnn.benchmark = False
+        recorder.update(precision="fp32", preprocessing="CPU gateway before native batch queue",
+                        pipeline="cpu-ready-v1",
                         model_id=os.environ["MODEL_ID"], model_revision=os.environ["MODEL_REVISION"],
                         torch=torch.__version__, cuda=torch.version.cuda)
 
@@ -79,23 +80,25 @@ class GPUModel:
         return elapsed
 
     def predict_strings(self, inputs):
+        from .prepared import decode_tensor, processor_contract
         start = time.perf_counter()
-        from PIL import Image
         ids = []
         hashes = []
         try:
             load_ms = self.ensure_loaded()
-            preprocess_start = time.perf_counter()
-            images = []
+            unpack_start = time.perf_counter()
+            prepared = []
+            payloads = []
+            contract = processor_contract(self.processor)
             for item in inputs:
                 payload = json.loads(item)
+                payloads.append(payload)
                 ids.append(payload["request_id"])
-                raw = base64.b64decode(payload["image_b64"], validate=True)
-                hashes.append(hashlib.sha256(raw).hexdigest())
-                with Image.open(io.BytesIO(raw)) as image:
-                    images.append(image.convert("RGB"))
-            tensors = self.processor(images=images, return_tensors="pt")
-            preprocess_ms = (time.perf_counter() - preprocess_start) * 1000
+                hashes.append(payload["image_sha256"])
+                prepared.append(decode_tensor(payload, contract, self.torch))
+            tensors = {"pixel_values": self.torch.cat(prepared, dim=0)}
+            unpack_ms = (time.perf_counter() - unpack_start) * 1000
+            preprocess_ms = sum(p["preprocess_ms"] + p["decode_ms"] for p in payloads)
             transfer_start = time.perf_counter()
             tensors = {key: value.to("cuda:0") for key, value in tensors.items()}
             self.torch.cuda.synchronize()
@@ -110,12 +113,16 @@ class GPUModel:
             outputs = [{"request_id": request_id, "label": self.model.config.id2label[index],
                         "class_id": index, "model": os.environ["CLIPPER_MODEL_NAME"],
                         "precision": "fp32", "batch_size": len(inputs), "load_ms": load_ms,
-                        "preprocess_ms": preprocess_ms, "h2d_ms": h2d_ms, "forward_ms": forward_ms}
-                       for request_id, index in zip(ids, indices)]
+                        "pipeline": "cpu-ready-v1", "unpack_ms": unpack_ms,
+                        "preprocess_ms": payload["preprocess_ms"], "decode_ms": payload["decode_ms"],
+                        "cpu_queue_ms": payload["cpu_queue_ms"], "h2d_ms": h2d_ms, "forward_ms": forward_ms,
+                        "server_e2e_ms": (time.time_ns() / 1000 - payload["received_unix_us"]) / 1000}
+                       for request_id, index, payload in zip(ids, indices, payloads)]
             encoded = [json.dumps(output, ensure_ascii=False) for output in outputs]
             event = {"event": "batch_complete", "request_ids": ids, "image_sha256": hashes,
                      "batch_size": len(inputs), "load_ms": load_ms, "preprocess_ms": preprocess_ms,
                      "h2d_ms": h2d_ms, "forward_ms": forward_ms,
+                     "pipeline": "cpu-ready-v1", "unpack_ms": unpack_ms,
                      "postprocess_ms": (time.perf_counter() - post_start) * 1000,
                      "worker_total_ms": (time.perf_counter() - start) * 1000}
             self.recorder.append(event)

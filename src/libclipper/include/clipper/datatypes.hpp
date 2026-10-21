@@ -2,6 +2,7 @@
 #define CLIPPER_LIB_DATATYPES_H
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -247,6 +248,8 @@ class Query {
   std::shared_ptr<PredictionData> input_;
   // TODO change this to a deadline instead of a duration
   long latency_budget_micros_;
+  // Optional CPU-ingress deadline; zero preserves the original application API.
+  int64_t deadline_unix_us_ = 0;
   std::string selection_policy_;
   std::vector<VersionedModelId> candidate_models_;
   std::chrono::time_point<std::chrono::high_resolution_clock> create_time_;
@@ -361,6 +364,7 @@ class PredictTask {
   float utility_;
   QueryId query_id_;
   long latency_slo_micros_;
+  int64_t deadline_unix_us_ = 0;
   std::chrono::time_point<std::chrono::system_clock> recv_time_;
   bool artificial_;
 };

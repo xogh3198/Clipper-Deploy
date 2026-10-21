@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -70,6 +71,9 @@ folly::Future<Response> QueryProcessor::predict(Query query) {
   boost::optional<std::string> default_explanation;
   std::vector<PredictTask> tasks =
       current_policy->select_predict_tasks(selection_state, query, query_id);
+  for (auto& task : tasks) {
+    task.deadline_unix_us_ = query.deadline_unix_us_;
+  }
 
   log_info_formatted(LOGGING_TAG_QUERY_PROCESSOR, "Found {} tasks",
                      tasks.size());
@@ -85,8 +89,13 @@ folly::Future<Response> QueryProcessor::predict(Query query) {
 
   size_t num_tasks = task_futures.size();
 
-  folly::Future<folly::Unit> timer_future =
-      timer_system_.set_timer(query.latency_budget_micros_);
+  long timer_budget = query.latency_budget_micros_;
+  if (query.deadline_unix_us_ != 0) {
+    const int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    timer_budget = static_cast<long>(std::max<int64_t>(0, query.deadline_unix_us_ - now_us));
+  }
+  folly::Future<folly::Unit> timer_future = timer_system_.set_timer(timer_budget);
 
   std::shared_ptr<std::mutex> outputs_mutex = std::make_shared<std::mutex>();
   std::vector<Output> outputs;

@@ -2,6 +2,7 @@
 #define CLIPPER_LIB_TASK_EXECUTOR_H
 
 #include <chrono>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -137,6 +138,14 @@ class ModelQueue {
     std::lock_guard<std::mutex> lock(queue_mutex_);
     Deadline deadline = std::chrono::system_clock::now() +
                         std::chrono::microseconds(task.latency_slo_micros_);
+    if (task.deadline_unix_us_ != 0) {
+      deadline = Deadline(std::chrono::microseconds(task.deadline_unix_us_));
+      remove_tasks_with_elapsed_deadlines();
+      const char* configured_limit = std::getenv("CLIPPER_MAX_READY_QUEUE");
+      const size_t limit = configured_limit ? std::strtoul(configured_limit, nullptr, 10) : 256;
+      // Same outcome as an expired queued task: the app timer returns fallback.
+      if (deadline <= std::chrono::system_clock::now() || queue_.size() >= limit) return;
+    }
     queue_.emplace(deadline, std::move(task));
     queue_not_empty_condition_.notify_one();
   }

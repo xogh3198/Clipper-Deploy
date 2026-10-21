@@ -2,6 +2,9 @@
 
 원본 Clipper 프런트엔드와 독립 GPU 워커를 사용합니다. 저장소 루트에서 실행합니다.
 
+CPU 전처리를 C++ 배치 큐 앞에 배치한 버전입니다. 기존 설치를 갱신할 때는
+[CPU_READY_PIPELINE.md](CPU_READY_PIPELINE.md)의 재빌드 절차를 먼저 확인하세요.
+
 ## 1. 코드와 Docker 확인
 
 ```bash

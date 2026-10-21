@@ -19,6 +19,15 @@ CORE_PATHS = ["configure", "dockerfiles/QueryFrontendDockerfile", "dockerfiles/M
               "containers/python/rpc.py", "src/libclipper/src/containers.cpp",
               "src/libclipper/src/task_executor.cpp", "src/libclipper/include/clipper/task_executor.hpp",
               "src/frontends/src/query_frontend_main.cpp"]
+CPU_READY_ADAPTER_SOURCES = {
+    "src/libclipper/include/clipper/datatypes.hpp": "c7fd8eeb57e3a458e88ac53166813d2d081fa2c71cef413ee9784fc2a7fb028f",
+    "src/frontends/src/query_frontend.hpp": "44d742cc66ff12b8534760faf91d67a32822f0c5854e82b15d1f737995710aa0",
+    "src/libclipper/src/query_processor.cpp": "8f25c943c2bc0cf3cd3286300f52787312fe0d149a922ac7b125509599ca5cd7",
+    "src/libclipper/include/clipper/task_executor.hpp": "47b91460a261ed2ad4666d90257387b52ac27bb6a536fbe6f252043edafebdec",
+    "src/frontends/src/query_frontend_tests.cpp": "a342cb7e789caa26b955b1cd3473eaa34662ac3531fd95eb4966add2bc9a64b1",
+    "src/libclipper/test/task_executor_test.cpp": "7c79e66f691f1b5b9c49b3bf980996ae8f9b89845ee0d9f633fee9f61a7ff284",
+}
+CORE_PATHS += [p for p in CPU_READY_ADAPTER_SOURCES if p not in CORE_PATHS]
 
 
 def run(args, capture=False, cwd=ROOT):
@@ -64,12 +73,17 @@ def check_original(c):
                    "containers/python/rpc.py", "containers/query_frontend", "containers/mgmt_frontend"],
                   capture=True, cwd=root)
     # New Docker ignore files are not tracked until user commits, and do not change source.
-    unexpected = [p for p in changed.splitlines() if not p.endswith("Dockerfile.dockerignore")]
+    unexpected = [p for p in changed.splitlines()
+                  if not p.endswith("Dockerfile.dockerignore") and p not in CPU_READY_ADAPTER_SOURCES]
     if unexpected:
         raise RuntimeError("Original source differs from required commit: " + ", ".join(unexpected))
     for path in CORE_PATHS:
         if not (root / path).is_file():
             raise RuntimeError("Original file missing: " + path)
+    for path, expected in CPU_READY_ADAPTER_SOURCES.items():
+        actual = hashlib.sha256((root / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        if actual != expected:
+            raise RuntimeError("CPU-ready deadline adapter differs from audited source: " + path)
 
 
 def prepare_base(c):
@@ -91,7 +105,7 @@ def prepare_base(c):
 def build(c):
     info = docker_info()
     check_original(c)
-    print("Building original Clipper core; git submodules are required (source is not edited).")
+    print("Building Clipper with the audited CPU-ingress deadline adapter; native batch selection is retained.")
     run(["git", "submodule", "update", "--init", "--recursive"], cwd=c["ROOT"])
     status = run(["git", "submodule", "status", "--recursive"], capture=True, cwd=c["ROOT"])
     if any(line.startswith(("+", "-", "U")) for line in status.splitlines()):
@@ -121,6 +135,7 @@ def build(c):
     _, _, manifest = paths(c)
     recipe_path = Path(c["ROOT"]) / "deploy/docker/lib-base.Dockerfile"
     manifest.write_text(json.dumps({"base_commit": BASE_COMMIT, "images": images,
+                        "pipeline": "cpu-ready-v1", "deadline_adapter": CPU_READY_ADAPTER_SOURCES,
                         "dependency_base_locally_built": c["BUILD_LIB_BASE"] == "1",
                         "dependency_googletest_revision": base_labels.get("org.clipper.gpu.googletest"),
                         "dependency_event_header_compatibility": base_labels.get("org.clipper.gpu.event-header-compatibility"),
@@ -136,6 +151,8 @@ def verify_images(c):
     if not path.exists():
         raise RuntimeError("No build manifest; run build")
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    if manifest.get("pipeline") != "cpu-ready-v1":
+        raise RuntimeError("Old JPEG-after-batching images; rebuild for cpu-ready-v1 before running")
     for key in ("QUERY_IMAGE", "MANAGEMENT_IMAGE", "WORKER_IMAGE", "REDIS_IMAGE"):
         name = c[key]
         expected = manifest["images"].get(name)
@@ -149,7 +166,8 @@ def oneoff(c, module, gpu=False, offline=False):
     args = ["docker", "run", "--rm", "--user", docker_user(info),
             "--mount", "type=bind,src=" + c["MODEL_DIR"] + ",dst=/models" + (",readonly" if offline else ""),
             "-e", "MODEL_ID=" + c["MODEL_ID"], "-e", "MODEL_REVISION=" + c["MODEL_REVISION"],
-            "-e", "CPU_THREADS=" + c["CPU_THREADS"]]
+            "-e", "CPU_THREADS=" + c["CPU_THREADS"],
+            "-e", "CPU_INTEROP_THREADS=" + c["CPU_INTEROP_THREADS"]]
     if gpu:
         args += ["--gpus", "device=" + c["GPU"]]
     if offline:
@@ -241,7 +259,7 @@ def up(c):
     run_id = time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
     compose_path.write_text(json.dumps(compose_spec(c, docker_user(info), run_id), indent=2), encoding="utf-8")
     active_path.write_text(json.dumps({"run_id": run_id, "config": c}, indent=2), encoding="utf-8")
-    compose(c, "up", "-d", "redis", "management", "query")
+    compose(c, "up", "-d", "redis", "management", "query", "gateway")
     wait_for(lambda: isinstance(client.http_json(endpoint(c, "get_all_applications"), {"verbose": True}), list))
     # Health is a GET, not a prediction. This does not warm the model.
     wait_for(lambda: client.http_json("http://127.0.0.1:" + c["QUERY_PORT"] + "/metrics") is not None)

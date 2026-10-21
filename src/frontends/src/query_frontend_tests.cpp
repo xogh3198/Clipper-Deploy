@@ -89,6 +89,36 @@ TEST_F(QueryFrontendTest, TestDecodeCorrectInputInts) {
   EXPECT_EQ(parsed_query.selection_policy_, "test_policy");
 }
 
+TEST_F(QueryFrontendTest, CpuIngressDeadlineIsNotRestarted) {
+  const int64_t deadline = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count() + 100000;
+  auto responses = rh_.decode_and_handle_predict(
+      "{\"input\":[1],\"deadline_unix_us\":" + std::to_string(deadline) + "}",
+      "test", "test_policy", 200000, InputType::Ints).get();
+  const Query& query = responses[0].value().query_;
+  EXPECT_EQ(query.deadline_unix_us_, deadline);
+  EXPECT_GT(query.latency_budget_micros_, 0);
+  EXPECT_LE(query.latency_budget_micros_, 100000);
+}
+
+TEST_F(QueryFrontendTest, CpuIngressDeadlineCannotExtendAppSlo) {
+  const int64_t now = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  auto responses = rh_.decode_and_handle_predict(
+      "{\"input\":[1],\"deadline_unix_us\":" + std::to_string(now + 10000000) + "}",
+      "test", "test_policy", 200000, InputType::Ints).get();
+  const Query& query = responses[0].value().query_;
+  EXPECT_LE(query.latency_budget_micros_, 200000);
+  EXPECT_LT(query.deadline_unix_us_, now + 10000000);
+}
+
+TEST_F(QueryFrontendTest, ExpiredCpuIngressHasZeroRemainingBudget) {
+  auto responses = rh_.decode_and_handle_predict(
+      "{\"input\":[1],\"deadline_unix_us\":1}",
+      "test", "test_policy", 200000, InputType::Ints).get();
+  EXPECT_EQ(responses[0].value().query_.latency_budget_micros_, 0);
+}
+
 TEST_F(QueryFrontendTest, TestDecodeCorrectInputIntsBatch) {
   std::string test_json_ints =
       "{\"input_batch\": [[1, 2], [10, 20], [100, 200]]}";

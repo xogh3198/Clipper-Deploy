@@ -40,9 +40,12 @@ def load(root=ROOT):
     for key in ("ALLOW_GPU_SHARING", "PULL_LIB_BASE", "BUILD_LIB_BASE"):
         if values[key] not in ("0", "1"):
             raise ValueError(key + " must be 0 or 1")
-    for key in ("CPU_THREADS", "QUERY_THREADS", "QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT", "BASE_BUILD_JOBS"):
+    for key in ("CPU_THREADS", "CPU_INTEROP_THREADS", "PREPROCESS_WORKERS", "MAX_QUEUE_SIZE",
+                "QUERY_THREADS", "QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT", "BASE_BUILD_JOBS"):
         if int(values[key]) <= 0:
             raise ValueError(key + " must be positive")
+    if int(values["PREPROCESS_WORKERS"]) > 32:
+        raise ValueError("PREPROCESS_WORKERS must be in 1..32")
     if len({values[k] for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")}) != 3:
         raise ValueError("Host ports must be distinct")
     if any(int(values[k]) > 65535 for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")):
@@ -74,9 +77,9 @@ def compose_spec(c, worker_user="0:0", run_id="pending"):
                            ports=["127.0.0.1:" + c["MANAGEMENT_PORT"] + ":1338"],
                            depends_on={"redis": {"condition": "service_healthy"}}),
         "query": dict(base, image=c["QUERY_IMAGE"],
+                      environment={"CLIPPER_MAX_READY_QUEUE": c["MAX_QUEUE_SIZE"]},
                       command=["--redis_ip=redis", "--redis_port=6379", "--rpc_service_port=7000",
                                "--prediction_cache_size=0", "--thread_pool_size=" + c["QUERY_THREADS"]],
-                      ports=["127.0.0.1:" + c["QUERY_PORT"] + ":1337"],
                       depends_on={"redis": {"condition": "service_healthy"}}),
     }
     services["worker"] = dict(base, image=c["WORKER_IMAGE"], user=worker_user,
@@ -86,8 +89,18 @@ def compose_spec(c, worker_user="0:0", run_id="pending"):
         environment={"CLIPPER_MODEL_NAME": c["MODEL_NAME"], "CLIPPER_MODEL_VERSION": c["MODEL_VERSION"],
                      "CLIPPER_MODEL_PATH": "/models", "CLIPPER_INPUT_TYPE": "strings", "CLIPPER_IP": "query",
                      "CLIPPER_PORT": "7000", "MODEL_ID": c["MODEL_ID"], "MODEL_REVISION": c["MODEL_REVISION"],
-                     "CPU_THREADS": c["CPU_THREADS"], "RUN_ID": run_id,
+                     "CPU_THREADS": c["CPU_THREADS"], "CPU_INTEROP_THREADS": c["CPU_INTEROP_THREADS"],
+                     "RUN_ID": run_id,
                      "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
         deploy={"resources": {"reservations": {"devices": [
             {"driver": "nvidia", "device_ids": [c["GPU"]], "capabilities": ["gpu"]}]}}})
+    services["gateway"] = dict(base, image=c["WORKER_IMAGE"], user=worker_user,
+        command=["python", "-m", "clipper_gpu.gateway"],
+        ports=["127.0.0.1:" + c["QUERY_PORT"] + ":8080"], depends_on=["query"],
+        volumes=[{"type": "bind", "source": c["MODEL_DIR"], "target": "/models", "read_only": True}],
+        environment={"MODEL_ID": c["MODEL_ID"], "MODEL_REVISION": c["MODEL_REVISION"],
+            "CPU_THREADS": c["CPU_THREADS"], "CPU_INTEROP_THREADS": c["CPU_INTEROP_THREADS"],
+            "PREPROCESS_WORKERS": c["PREPROCESS_WORKERS"], "MAX_QUEUE_SIZE": c["MAX_QUEUE_SIZE"],
+            "APPLICATION": c["APPLICATION"], "SLO_MS": c["SLO_MS"],
+            "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"})
     return {"services": services}

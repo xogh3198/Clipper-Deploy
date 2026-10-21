@@ -3,7 +3,9 @@
 모델·GPU·배치 설정과 단계별 명령은 **[setting_readme.md](setting_readme.md)**를 먼저 참고하세요.
 
 Clipper 원본 프런트엔드와 배치·RPC 경로에 독립 GPU 워커를 연결하는 추가 구성입니다.
-INFaaS/Proteus 코드·이미지·컨테이너를 실행 백엔드로 사용하지 않습니다. 기존 Clipper 핵심 코드는 수정하지 않습니다.
+INFaaS/Proteus 코드·이미지·컨테이너를 실행 백엔드로 사용하지 않습니다.
+CPU gateway와 최초 마감시각 전달 어댑터를 추가했으며, 원본 C++ 배치 선택 정책은 유지합니다.
+변경 범위와 재실행 절차: [CPU_READY_PIPELINE.md](CPU_READY_PIPELINE.md).
 
 기준 원본 커밋: `9f25e3fc7f8edc891615e81c5b80d3d8aed72608` (`develop`).
 원본에는 논문 초기 AIMD 이후의 **Adaptive Batching v2**가 들어 있습니다.
