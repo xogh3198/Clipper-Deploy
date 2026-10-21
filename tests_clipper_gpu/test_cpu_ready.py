@@ -44,7 +44,7 @@ class GatewayTests(unittest.TestCase):
         self.native.server_close()
         self.thread.join(3)
 
-    def gateway(self, prepare, slo=200, limit=256):
+    def gateway(self, prepare, slo=200, limit=0):
         server = create_server(SimpleNamespace(prepare=prepare), "imagenet", slo,
             ("127.0.0.1", 0), "http://127.0.0.1:%d" % self.native.server_port, limit=limit)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

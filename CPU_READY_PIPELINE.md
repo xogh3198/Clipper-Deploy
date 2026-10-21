@@ -1,7 +1,8 @@
 # CPU 전처리 → 원본 Clipper 배치 큐 → GPU 실행
 
 배포 브랜치: `docker/v4` (`docker/v2`에서 분기, main 변경 없음).
-세 저장소의 전처리 분리 버전은 `docker/v4`로 통일했습니다. 이전 `docker/cpu-ready-v1`과 실행 코드는 같습니다.
+`docker/v4` 기준 보정 패치에서는 새로 추가했던 기본 256개 큐 제한을 해제했습니다.
+전체 실험 설정과 유지/변경 범위는 [EXPERIMENT_SETTINGS.md](EXPERIMENT_SETTINGS.md)에 정리했습니다.
 기존 Clipper `docker/v3`의 별도 cold 초기화 수정은 이 브랜치에 자동 병합하지 않았습니다.
 
 ## GPU 서버에서 코드 받기
@@ -42,15 +43,17 @@ JPEG 디코딩/HF 전처리는 더 이상 C++ 배치 선택 이후의 GPU 실행
 CPU_THREADS=2
 CPU_INTEROP_THREADS=1
 PREPROCESS_WORKERS=1
-MAX_QUEUE_SIZE=256
+MAX_QUEUE_SIZE=0
 QUERY_IMAGE=taeho-clipper-query:cpu-ready-v1
 MANAGEMENT_IMAGE=taeho-clipper-management:cpu-ready-v1
 WORKER_IMAGE=taeho-clipper-worker:cpu-ready-v1
 ```
 
 `CPU_THREADS`는 intra-op, `PREPROCESS_WORKERS`는 CPU 준비 동시 작업자 수입니다.
-MAX_QUEUE_SIZE는 CPU ingress의 미완료 요청과 C++ ready 큐에 각각 적용되는 한도입니다.
-다른 구현의 단일 전체 미완료 요청 한도와 정확히 같은 자원 제한이라고 볼 수는 없습니다.
+`MAX_QUEUE_SIZE=0`은 기존처럼 명시적인 큐 크기 제한이 없다는 뜻입니다.
+기존에 새 안내를 따라 256을 넣었다면 0으로 수정하세요. 양수는 사용자가 요청할 때만 쓰는 선택 제한입니다.
+무제한 큐는 과부하에서 메모리 증가 가능성이 있으며, 이번에는 기존 조건 보존을 위해 새 제한을 강제하지 않습니다.
+전처리 작업자 1개는 기존 예측 실행 경로의 직렬 CPU 처리 수를 유지한 설정입니다.
 
 ```bash
 docker info --format '{{.DockerRootDir}}'

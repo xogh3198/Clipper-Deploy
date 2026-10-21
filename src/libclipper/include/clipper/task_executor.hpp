@@ -140,11 +140,11 @@ class ModelQueue {
                         std::chrono::microseconds(task.latency_slo_micros_);
     if (task.deadline_unix_us_ != 0) {
       deadline = Deadline(std::chrono::microseconds(task.deadline_unix_us_));
-      remove_tasks_with_elapsed_deadlines();
       const char* configured_limit = std::getenv("CLIPPER_MAX_READY_QUEUE");
-      const size_t limit = configured_limit ? std::strtoul(configured_limit, nullptr, 10) : 256;
+      const size_t limit = configured_limit ? std::strtoul(configured_limit, nullptr, 10) : 0;
       // Same outcome as an expired queued task: the app timer returns fallback.
-      if (deadline <= std::chrono::system_clock::now() || queue_.size() >= limit) return;
+      // Zero keeps the original queue's lack of a configured size limit.
+      if (deadline <= std::chrono::system_clock::now() || (limit > 0 && queue_.size() >= limit)) return;
     }
     queue_.emplace(deadline, std::move(task));
     queue_not_empty_condition_.notify_one();

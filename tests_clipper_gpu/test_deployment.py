@@ -28,6 +28,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(c["SLO_MS"], "200")
         self.assertEqual(c["MODEL_NAME"], "resnet-50")
         self.assertEqual(c["BATCH_SIZE"], "-1")
+        self.assertEqual(c["MAX_QUEUE_SIZE"], "0")
         self.assertEqual(len(c["MODEL_REVISION"]), 40)
         self.assertEqual(c["BUILD_LIB_BASE"], "1")
         self.assertEqual(c["PULL_LIB_BASE"], "0")
@@ -48,7 +49,7 @@ class ConfigTests(unittest.TestCase):
     def test_reject_bad_settings(self):
         for values in ({"GPU": "all"}, {"BATCH_SIZE": "0"}, {"MODEL_REVISION": "main"},
                        {"SLO_MS": "nan"}, {"QUERY_PORT": "70000"}, {"APPLICATION": "../other"},
-                       {"BUILD_LIB_BASE": "yes"}, {"BASE_BUILD_JOBS": "0"}):
+                       {"BUILD_LIB_BASE": "yes"}, {"BASE_BUILD_JOBS": "0"}, {"MAX_QUEUE_SIZE": "-1"}):
             with self.subTest(values=values), patch.dict(os.environ, values):
                 with self.assertRaises(ValueError):
                     load()

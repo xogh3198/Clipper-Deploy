@@ -40,12 +40,14 @@ def load(root=ROOT):
     for key in ("ALLOW_GPU_SHARING", "PULL_LIB_BASE", "BUILD_LIB_BASE"):
         if values[key] not in ("0", "1"):
             raise ValueError(key + " must be 0 or 1")
-    for key in ("CPU_THREADS", "CPU_INTEROP_THREADS", "PREPROCESS_WORKERS", "MAX_QUEUE_SIZE",
+    for key in ("CPU_THREADS", "CPU_INTEROP_THREADS", "PREPROCESS_WORKERS",
                 "QUERY_THREADS", "QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT", "BASE_BUILD_JOBS"):
         if int(values[key]) <= 0:
             raise ValueError(key + " must be positive")
     if int(values["PREPROCESS_WORKERS"]) > 32:
         raise ValueError("PREPROCESS_WORKERS must be in 1..32")
+    if int(values["MAX_QUEUE_SIZE"]) < 0:
+        raise ValueError("MAX_QUEUE_SIZE must be >= 0 (0 keeps the original unbounded queues)")
     if len({values[k] for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")}) != 3:
         raise ValueError("Host ports must be distinct")
     if any(int(values[k]) > 65535 for k in ("QUERY_PORT", "MANAGEMENT_PORT", "STATS_PORT")):

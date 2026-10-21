@@ -1,4 +1,4 @@
-"""JPEG ingress -> bounded CPU stage -> original C++ queue with original deadline."""
+"""JPEG ingress -> CPU stage -> original C++ queue with original deadline."""
 import concurrent.futures
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -17,10 +17,12 @@ def fallback(reason, native_submitted=False):
 
 
 def create_server(processor, application, slo_ms, address=("0.0.0.0", 8080),
-                  query_base="http://query:1337", limit=256, workers=1):
-    if limit < 1 or not 1 <= workers <= 32:
+                  query_base="http://query:1337", limit=0, workers=1):
+    if limit < 0 or not 1 <= workers <= 32:
         raise ValueError("Invalid queue/preprocessing worker limit")
-    slots = threading.BoundedSemaphore(limit)
+    # Zero preserves the previous deployment's absence of an admission cap.
+    # A positive limit is explicitly opt-in, never a new default of 256.
+    slots = threading.BoundedSemaphore(limit) if limit else None
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="clipper-cpu")
     slo_us = int(float(slo_ms) * 1000)
     if slo_us <= 0:
@@ -53,7 +55,7 @@ def create_server(processor, application, slo_ms, address=("0.0.0.0", 8080),
             deadline = received + slo_us
             if self.path != "/" + application + "/predict":
                 return self.send_error(404)
-            if not slots.acquire(blocking=False):
+            if slots is not None and not slots.acquire(blocking=False):
                 return self.send(fallback("CPU ingress outstanding request limit reached"))
             future = None
             native_submitted = False
@@ -88,10 +90,11 @@ def create_server(processor, application, slo_ms, address=("0.0.0.0", 8080),
                 self.send({"error": str(error), "pipeline": PIPELINE}, status=400)
             finally:
                 # A timed-out running CPU task still owns its bounded slot.
-                if future is not None and not future.done():
-                    future.add_done_callback(lambda unused: slots.release())
-                else:
-                    slots.release()
+                if slots is not None:
+                    if future is not None and not future.done():
+                        future.add_done_callback(lambda unused: slots.release())
+                    else:
+                        slots.release()
 
         def log_message(self, *args):
             pass
@@ -108,7 +111,7 @@ def create_server(processor, application, slo_ms, address=("0.0.0.0", 8080),
 
 def main():
     server = create_server(CpuProcessor(), os.environ["APPLICATION"], os.environ["SLO_MS"],
-        limit=int(os.environ.get("MAX_QUEUE_SIZE", "256")),
+        limit=int(os.environ.get("MAX_QUEUE_SIZE", "0")),
         workers=int(os.environ.get("PREPROCESS_WORKERS", "1")))
     try:
         server.serve_forever()

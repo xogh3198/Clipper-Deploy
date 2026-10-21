@@ -4,6 +4,7 @@
 
 CPU 전처리를 C++ 배치 큐 앞에 배치한 버전입니다. 기존 설치를 갱신할 때는
 [CPU_READY_PIPELINE.md](CPU_READY_PIPELINE.md)의 재빌드 절차를 먼저 확인하세요.
+기존 설정 보존 보정 패치와 전체 실험 조건: [EXPERIMENT_SETTINGS.md](EXPERIMENT_SETTINGS.md).
 
 ## 1. 코드와 Docker 확인
 

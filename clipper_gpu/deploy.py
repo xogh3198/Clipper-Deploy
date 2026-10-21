@@ -23,7 +23,7 @@ CPU_READY_ADAPTER_SOURCES = {
     "src/libclipper/include/clipper/datatypes.hpp": "c7fd8eeb57e3a458e88ac53166813d2d081fa2c71cef413ee9784fc2a7fb028f",
     "src/frontends/src/query_frontend.hpp": "44d742cc66ff12b8534760faf91d67a32822f0c5854e82b15d1f737995710aa0",
     "src/libclipper/src/query_processor.cpp": "8f25c943c2bc0cf3cd3286300f52787312fe0d149a922ac7b125509599ca5cd7",
-    "src/libclipper/include/clipper/task_executor.hpp": "47b91460a261ed2ad4666d90257387b52ac27bb6a536fbe6f252043edafebdec",
+    "src/libclipper/include/clipper/task_executor.hpp": "9ddc09c7577087cc3aab10f47cb2ca785fc603286356e2fc3652a60277531c0b",
     "src/frontends/src/query_frontend_tests.cpp": "a342cb7e789caa26b955b1cd3473eaa34662ac3531fd95eb4966add2bc9a64b1",
     "src/libclipper/test/task_executor_test.cpp": "7c79e66f691f1b5b9c49b3bf980996ae8f9b89845ee0d9f633fee9f61a7ff284",
 }
