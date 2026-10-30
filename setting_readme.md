@@ -1,5 +1,7 @@
 # Clipper GPU 설정 및 실행
 
+> **v1 / v2 ResNet 실험:** ResNet-18·34·50·101·152, 단일 V100, FP32 설정과 빌드·실행 명령은 [새 실험 안내](experiments/resnet/setting_readme.md)를 사용합니다. 아래는 기존 실행 경로의 설명입니다.
+
 원본 Clipper 프런트엔드와 독립 GPU 워커를 사용합니다. 저장소 루트에서 실행합니다.
 
 CPU 전처리를 C++ 배치 큐 앞에 배치한 버전입니다. 기존 설치를 갱신할 때는

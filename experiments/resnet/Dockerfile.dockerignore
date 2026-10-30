@@ -1,0 +1,11 @@
+**
+!experiments/
+!experiments/resnet/
+!experiments/resnet/**
+experiments/resnet/local.env
+experiments/resnet/generated/**
+!clipper_gpu/
+!clipper_gpu/**
+!containers/
+!containers/python/
+!containers/python/rpc.py
