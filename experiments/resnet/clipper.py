@@ -62,28 +62,32 @@ class Model:
         self.lock = threading.RLock()
 
     def predict_strings(self, inputs):
-        from clipper_gpu.prepared import decode_tensor
         with self.lock:
+            entered = time.perf_counter()
             load = self.runtime.load(self.name)
             payloads = [json.loads(item) for item in inputs]
-            prepared = [{"inputs": {"pixel_values": decode_tensor(p, self.runtime.preprocess_contract,
-                                                                   self.runtime.torch).numpy()},
-                         "contract": self.runtime.preprocess_contract, "image_size": p["image_size"],
-                         "timings": {"decode": p["decode_ms"], "preprocess": p["preprocess_ms"]}}
-                        for p in payloads]
+            prepared,ready = [],[]
+            for p in payloads:
+                # Application preprocessing stays in the model callback, after
+                # native Clipper batching. No gateway/deadline rewrite is used.
+                raw = base64.b64decode(p["image_b64"],validate=True)
+                prepared.append(self.runtime.preparation._prepare(raw))
+                ready.append(time.perf_counter())
             started = time.perf_counter()
             results = self.runtime.infer_prepared(prepared)
-            gpu_ms = (time.perf_counter()-started)*1000
+            finished = time.perf_counter()
+            gpu_ms = (finished-started)*1000
             self.batches += 1
             self.inputs += len(inputs)
             return [json.dumps({"request_id": p["request_id"], "label": r["label"], "model": self.name,
                                "batch_size": len(inputs), "load_ms": load["load_ms"],
-                               "server_e2e_ms": (time.time_ns()/1000-p["received_unix_us"])/1000,
-                               "timings": {"worker.cpu_queue": p["cpu_queue_ms"],
-                                   "worker.cpu_service": p["decode_ms"]+p["preprocess_ms"],
+                               "server_e2e_ms": (finished-entered)*1000,
+                               "post_preprocess_ms": (finished-prepared_at)*1000,
+                               "timings": {"worker.cpu_service": r["timings"]["decode"]+r["timings"]["preprocess"],
+                                   "measurement.post_preprocess": (finished-prepared_at)*1000,
                                    "worker.gpu_service": gpu_ms, "worker.load": load["load_ms"],
                                    "worker.batch_size": len(inputs)}})
-                    for p, r in zip(payloads, results)]
+                    for p, r, prepared_at in zip(payloads, results, ready)]
 
 
 def stats(model):
@@ -92,6 +96,9 @@ def stats(model):
             if self.path not in {"/state", "/health"}:
                 return self.send_error(404)
             body = json.dumps({**model.runtime.describe(), "engine": "clipper",
+                "request_preprocessing": True, "native_core_modified": False,
+                "baseline_source_commit": "9f25e3fc7f8edc891615e81c5b80d3d8aed72608",
+                "preprocessing_placement": "model callback after native batch selection",
                 "rpc_started": True, "fixed_model": model.name,
                 "batches": model.batches, "processed": model.inputs}).encode()
             self.send_response(200)

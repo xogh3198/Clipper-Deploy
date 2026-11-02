@@ -7,6 +7,7 @@ COPY experiments/resnet/requirements.txt /opt/requirements.txt
 RUN python -m pip install --no-cache-dir -r /opt/requirements.txt
 WORKDIR /app
 COPY experiments/resnet /app/experiments/resnet
+COPY experiments/reproduce /app/experiments/reproduce
 COPY clipper_gpu /app/clipper_gpu
 COPY containers/python/rpc.py /opt/clipper/containers/python/rpc.py
 RUN ln -s /tmp/paired-clipper-is-ready.check /model_is_ready.check

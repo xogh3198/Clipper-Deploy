@@ -80,9 +80,9 @@ def settings(engine, root=ROOT):
         values[key] = str((p if p.is_absolute() else root/p).resolve())
     phase = phase["phase"]
     values.update(ROOT=str(root), ENGINE=engine, EXPERIMENT_PHASE=phase,
-                  WORKER_IMAGE=f"paired-{engine}-resnet:{phase}",
-                  PROJECT=f"paired-resnet-{engine}-{phase}")
-    values["RUN_DIR"] = str(Path(values["DATA_DIR"])/engine/phase)
+                  WORKER_IMAGE=f"source-{engine}-resnet:{phase}",
+                  PROJECT=f"source-{engine}-{phase}")
+    values["RUN_DIR"] = str(Path(values["DATA_DIR"])/engine/("source-"+phase))
     values["MODEL_NAME"] = "resnet18_v1" if engine == "clipper" and values["CLIPPER_MODE"] == "ht" else (
         "resnet152_v1" if engine == "clipper" else "resnet50_v1")
     return values
@@ -147,7 +147,7 @@ def verify_build(c):
 
 
 def core_images():
-    return ["paired-clipper-query:resnet-fp32", "paired-clipper-management:resnet-fp32", "redis:6.2-alpine"]
+    return ["paired-clipper-query:source-v1-fp32", "paired-clipper-management:source-v1-fp32", "redis:6.2-alpine"]
 
 
 def build(c):
@@ -225,10 +225,11 @@ def compose_spec(c, user="0:0"):
             "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "2s", "retries": 30}},
         "query": {"image": core_images()[0], "command": ["--redis_ip=redis", "--redis_port=6379",
             "--rpc_service_port=7000", "--prediction_cache_size=0", "--thread_pool_size="+c["QUERY_THREADS"]],
-            "environment": {"CLIPPER_MAX_READY_QUEUE": "0"}, "depends_on": {"redis": {"condition": "service_healthy"}}},
+            "ports": [f"127.0.0.1:{c['HOST_PORT']}:1337"],
+            "depends_on": {"redis": {"condition": "service_healthy"}}},
         "management": {"image": core_images()[1], "command": ["--redis_ip=redis", "--redis_port=6379"],
             "depends_on": {"redis": {"condition": "service_healthy"}}},
-        "gateway": gateway, "worker": worker}}
+        "worker": worker}}
 
 
 def compose(c, *args):
@@ -307,7 +308,7 @@ def up(c):
     path = Path(c["RUN_DIR"])/"compose.json"
     path.write_text(json.dumps(compose_spec(c, docker_user(info)), indent=2))
     if c["ENGINE"] == "clipper":
-        compose(c, "up", "-d", "redis", "query", "management", "gateway")
+        compose(c, "up", "-d", "redis", "query", "management")
         for attempt in range(60):
             try:
                 client(c, "native-register", capture=True); break
@@ -331,7 +332,7 @@ def up(c):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=["proteus", "infaas-accuracy", "infaas", "clipper"])
-    parser.add_argument("action", choices=["settings", "compose", "build", "setup", "up", "down", "state", "register", "query", "trace", "reset"])
+    parser.add_argument("action", choices=["settings", "compose", "build", "setup", "up", "down", "state", "register", "query", "trace", "reset", "logs"])
     args, extra = parser.parse_known_args(argv)
     c = settings(args.engine)
     if args.action == "settings":
@@ -348,6 +349,9 @@ def main(argv=None):
         else:
             print("No compose file for this experiment; no service was stopped.")
         return
+    if args.action == "logs":
+        docker_info(c)
+        return compose(c, "logs", "--tail", "100", *extra)
     return client(c, args.action, extra, network=not (args.action == "trace" and "--dry-run" in extra))
 
 

@@ -129,16 +129,14 @@ def test_native_infaas_proto_rpc_retains_cost_selection(monkeypatch,tmp_path):
         executor.close()
 
 
-def test_clipper_uses_its_existing_prepared_wire_contract(monkeypatch):
+def test_clipper_preprocesses_inside_the_model_callback_without_deadline_extensions(monkeypatch):
     pytest.importorskip("clipper_gpu.prepared")
     import torch
-    from experiments.resnet.clipper import GatewayProcessor,Model
+    from experiments.resnet.clipper import Model
     runtime,jpeg = fake_backend()
     runtime.torch = torch
-    processor = GatewayProcessor.__new__(GatewayProcessor)
-    processor.preparation = runtime.preparation
-    received = time.time_ns()//1000
-    wire = processor.prepare({"request_id":"id","image_b64":base64.b64encode(jpeg).decode()},received,received+200_000)
+    wire = {"request_id":"id","image_b64":base64.b64encode(jpeg).decode()}
+    before = runtime.preparation.decode_calls
     monkeypatch.setenv("MODEL_NAME","resnet152_v1")
     model = Model(runtime)
     result = json.loads(model.predict_strings([json.dumps(wire)])[0])
@@ -146,4 +144,6 @@ def test_clipper_uses_its_existing_prepared_wire_contract(monkeypatch):
     assert result["model"] == "resnet152_v1"
     assert result["label"] == "ImageNet class 258"
     assert result["batch_size"] == 1
-    assert result["timings"]["worker.cpu_service"] == 0
+    assert result["timings"]["worker.cpu_service"] > 0
+    assert runtime.preparation.decode_calls == before+1
+    assert result["post_preprocess_ms"] >= result["timings"]["worker.gpu_service"]

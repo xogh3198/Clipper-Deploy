@@ -2,6 +2,8 @@
 !experiments/
 !experiments/resnet/
 !experiments/resnet/**
+!experiments/reproduce/
+!experiments/reproduce/**
 experiments/resnet/local.env
 experiments/resnet/generated/**
 !clipper_gpu/
